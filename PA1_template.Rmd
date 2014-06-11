@@ -94,8 +94,9 @@ legend("topright", legend=c(legend.text), lty=2, lwd=1, col="red", cex=0.75)
 n.rows.all <- dim(data.all)[1]
 n.rows.good <- dim(data)[1]
 n.nas <- n.rows.all - n.rows.good
+pct.nas <- round(100 * n.nas / n.rows.all, 1)
 ```
-The number of rows with NAs is `r n.nas`.
+The number of rows with NAs is `r n.nas` which is `r pct.nas`% of all data rows.
 
 <!--
 2. Devise a strategy for filling in all of the missing values in the 
@@ -119,7 +120,7 @@ data.test.interval.step.means <- tapply(data.test$steps, data.test$interval,
                                         mean)
 # get the maximum number of steps for any interval during the day
 max.test.steps <- data.test.interval.step.means[
-    data.test.interval.step.means== max(data.test.interval.step.means)]
+    data.test.interval.step.means==max(data.test.interval.step.means)]
 max.test.step.period <- strftime(strptime(names(max.test.steps), "%H%M"),
                                  format="%H-%M")
 ```
@@ -137,9 +138,11 @@ n.test.steps.total <- sum(daily.test.steps)
 n.steps.total <- sum(daily.steps)
 ```
 
-The __mean__ number of daily steps is `r sprintf("%.2f", daily.test.steps.mean)`.
+The __mean__ number of daily steps is
+`r sprintf("%.2f", daily.test.steps.mean)`.
 
-The __median__ number of daily steps is `r sprintf("%.2f", daily.test.steps.median)`.
+The __median__ number of daily steps is
+`r sprintf("%.2f", daily.test.steps.median)`.
 
 
 ```{r}
@@ -148,16 +151,19 @@ hist(daily.test.steps, breaks=25, col="green",
      main="Histogram of total daily steps with imputed missing data", 
      xlab="Total Number of Daily Steps", 
      ylab="Number of Days")
-
+# overlay histogram of data with NAs removed
 hist(daily.steps, add=T, breaks=25, col=rgb(1, 0, 0, 0.5))
 legend("topleft", c("Imputed data effect"), col=c("green"), lwd=10)
-
 # add median line
 abline(v=daily.test.steps.median, lty=2, lwd=2, col="black")
 legend("topright", legend=c("median"), lty=2, lwd=2, col="black")
 ```
 
+Replacing NAs with mean values for the interval increases the total number of
+days with the mean number of steps, and the overall number of steps taken during
+the complete period of the data.
 
+<!--
 ```{r}
 # generate list of POSIX time objects of unique 5-minute intervals
 # - this is used for labaling the x-axis in the line plot
@@ -183,8 +189,11 @@ abline(v=max.test.steps.idx, lty=2, lwd=1, col="red")
 legend.text <- paste("Max # steps at", max.test.step.period)
 legend("topright", legend=c(legend.text), lty=2, lwd=1, col="red", cex=0.75)
 ```
+-->
 
-The __maximum__ mean number of steps during a 24-hour period was
+Replacing NAs with mean values for the interval has minimal effect on the mean
+of the total number of daily steps. The __maximum__ mean number of steps during
+a 24-hour period with data imputation was
 `r sprintf("%.2f", max.steps)` at `r sprintf("%s", max.step.period)`.
 
 ```{r}
@@ -209,22 +218,38 @@ Create a new factor variable in the dataset with two levels – “weekday” an
 -->
 
 ```{r}
-#data.test.weekdays <- weekdays(data.test$date)
+# create a weekday vs. weekend factor
 data.test$wkd <- as.factor(ifelse(weekdays(data.test$date) %in% c("Saturday",
                 "Sunday"), "weekend", "weekday"))
-
-#wkd.factor <- factor(ifelse(weekdays(data.test$date) %in% c("Saturday",
-#                    "Sunday"), "weekend", "weekday"))
-
+# create a data frame dith weekday factor
 data.bywkd <- aggregate(data.test$steps, by=list(interval=data.test$interval, 
                                                  wkd=data.test$wkd), FUN=mean)
-f <- factor(data.bywkd$wkd)
-
+# convert interval values (string at this point) to integer values
+# to enable plotting with lattice xyplot.
+data.bywkd$interval <- strtoi(data.bywkd$interval, 10L)
+# plot weekday data with lattice xyplot
 library(lattice)
-xyplot(x ~ x | wkd, 
-       data=data.bywkd, layout = c(1, 2))
-#xyplot(data.bywkd$x ~ data.bywkd$interval, 
-#       scales = list(x = list(at = 1:4, labels = levels(data.test$wkd))))
-
+xyplot(x ~ interval | wkd, type="l",
+       data=data.bywkd, layout = c(1, 2),
+       panel=function(x, y, ...) {
+           panel.xyplot(x, y, ...)
+           panel.abline(h = mean(y), lty=2) # add means
+           panel.loess(x, y, degree=2, span=2/3, lty=2, col="red")
+       },
+       xlab="Interval", ylab="Number of Steps" )
 ```
 
+```{r}
+wkd.means <- tapply(data.bywkd$x, data.bywkd$wkd, mean)
+wkd.max <- tapply(data.bywkd$x, data.bywkd$wkd, max)
+```
+
+The activity differs between weekends and weekdays by the mean number of steps
+per interval, `r wkd.means["weekend"]` on weekends and `r wkd.means["weekday"]`
+on weekdays. Weekends, therefore, tend to be more active throughout the day.
+
+On the other hand, the maximum number of steps in a single interval, is
+significantly higher during weekdays, `r wkd.max["weekday"]` vs.
+`r wkd.max["weekend"]`.
+
+###### End of report.
