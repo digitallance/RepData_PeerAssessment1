@@ -3,18 +3,144 @@
 
 ## Loading and preprocessing the data
 
-
+```{r cache=TRUE}
+# read in CSV data
+data.raw <- read.csv("activity.csv", sep=",", header=TRUE)
+# convert raw data to a data table
+library(data.table)
+data.all <- data.table(data.raw)
+# convert date column to POSIXct date object
+data.all$date <- as.POSIXct(strptime(data.all$date, "%Y-%m-%d"))
+# convert integer interval to a 4-character 0-filled string
+data.all$interval <- sprintf("%04d", data.all$interval)
+head(data.all)
+# identify complete cases without NAs
+data <- data.all[complete.cases(data.all)]
+```
 
 ## What is mean total number of steps taken per day?
 
+```{r cache=TRUE}
+# sum up daily steps
+daily.steps <- tapply(data$steps, data$date, sum)
+daily.steps.mean <- mean(daily.steps, na.rm=TRUE)
+daily.steps.median <- median(daily.steps, na.rm=TRUE)
+```
 
+The __mean__ number of daily steps is `r sprintf("%.2f", 
+daily.steps.mean)`.
+
+The __median__ number of daily steps is `r sprintf("%.2f", 
+daily.steps.median)`.
+
+```{r cache=TRUE}
+# draw histogram of average daily steps
+hist(daily.steps, breaks=25, col="green",
+     main="Histogram of total daily steps", 
+     xlab="Total Number of Daily Steps", 
+     ylab="Number of Days")
+# add median line
+abline(v=daily.steps.median, lty=2, lwd=2, col="black")
+legend("topright", legend=c("median"), lty=2, lwd=2, col="black")
+```
 
 ## What is the average daily activity pattern?
 
+```{r cache=TRUE}
+# generate daily means for each 5-minute time interval
+data.interval.step.means <- tapply(data$steps, data$interval, mean)
+# get the maximum number of steps for any interval during the day
+max.steps <- data.interval.step.means[
+    data.interval.step.means==max(data.interval.step.means)]
+max.step.period <- strftime(strptime(names(max.steps), "%H%M"), format="%H:%M")
+```
 
+The __maximum__ mean number of steps during a 24-hour period was
+`r sprintf("%.2f", max.steps)` at `r sprintf("%s", max.step.period)`.
+
+```{r cache=TRUE}
+# generate list of POSIX time objects of unique 5-minute intervals
+# - this is used for labaling the x-axis in the line plot
+x.intervals <- strptime(names(data.interval.step.means), "%H%M")
+# plot the average number of steps for 5-minute intervals in a 24-hour period
+plot(data.interval.step.means, type = "l", xaxt='n',
+     main="Average Daily Activity Pattern",
+     xlab="24 hour time of day",
+     ylab="Average steps in 5-minute interval")
+# create individual labels, one every hour
+xlabels <- seq(x.intervals[1], x.intervals[length(x.intervals)]+300, by=3600)
+# generate label locations
+# - based on every 12th interval item to correspond to a 1 hour period,
+#   i.e., 12 5-minute intervals = 1 hour
+xat <- seq(0, length(data.interval.step.means), by=12)
+# add the axis to the plot
+axis(side=1, at=xat, labels=strftime(xlabels, format="%H:%M"))
+# get list index (x-axis location) of the maximum value
+max.steps.idx <- which.max(data.interval.step.means)
+# draw line to show interval with the maximum mean number of steps
+abline(v=max.steps.idx, lty=2, lwd=1, col="red")
+legend.text <- paste("Max # steps at", max.step.period)
+legend("topright", legend=c(legend.text), lty=2, lwd=1, col="red", cex=0.75)
+```
 
 ## Imputing missing values
 
+<!--
+1. Calculate and report the total number of missing values in the dataset 
+(i.e. the total number of rows with NAs)
+-->
 
+```{r}
+n.rows.all <- dim(data.all)[1]
+n.rows.good <- dim(data)[1]
+n.nas <- n.rows.all - n.rows.good
+```
+The number of rows with NAs is `r n.nas`.
+
+<!--
+2. Devise a strategy for filling in all of the missing values in the 
+dataset. The strategy does not need to be sophisticated. For example, you could 
+use the mean/median for that day, or the mean for that 5-minute interval, etc. 
+-->
+
+```{r}
+# convert interval to 4-character string
+data.all$interval <- sprintf("%04d", data.all$interval)
+# copy data with NAs to another table before modifying NAs
+data.test <- data.all
+
+for (i in 1:nrow(data.all)) {
+    if (is.na(data.all[i,]$steps)) {
+        d.mean <- data.interval.step.means[data.all[i,]$interval]
+        data.test[i,]$steps <- round(d.mean)
+    }
+}
+
+data.test.interval.step.means <- tapply(data.test$steps, data.test$interval, 
+                                        mean)
+x3 <- strptime(names(data.test.interval.step.means), "%H%M")
+
+plot(data.test.interval.step.means, type = "l", xaxt='n',
+     main="Average Daily Activity Pattern",
+     xlab="24 hour time of day",
+     ylab="Average steps in 5-minute interval")
+xlabels <- seq(x3[1], x3[length(x3)]+300, by=3600)
+xat <- seq(0, length(data.test.interval.step.means), by=12)
+axis(side=1, at=xat, labels=strftime(xlabels, format="%H:%M"))
+
+
+max.test.steps <- data.test.interval.step.means[
+    data.test.interval.step.means== max(data.test.interval.step.means)]
+max.test.steps.idx <- which.max(data.test.interval.step.means)
+max.test.step.period <- strftime(strptime(names(max.test.steps), "%H%M"), 
+                                 format="%H:%M")
+abline(v=max.test.steps.idx, lty=2, lwd=1, col="red")
+legend.text <- paste("Max # steps at", max.test.step.period)
+legend("topright", legend=c(legend.text), lty=2, lwd=1, col="red", cex=0.75)
+
+sprintf("Maximum mean number of steps was %.1f at %s", max.test.steps, 
+        max.test.step.period)
+
+```
 
 ## Are there differences in activity patterns between weekdays and weekends?
